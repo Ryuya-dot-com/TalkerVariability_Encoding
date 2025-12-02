@@ -1,12 +1,15 @@
 // Learning Phase browser implementation
 (() => {
   // ---------- Constants ----------
-  const WORDS = [
-    "ardilla", "basurero", "caballo", "cebolla", "cinta", "conejo",
-    "cuaderno", "elote", "fresas", "gato", "grapadora", "hongos",
-    "lapiz", "lechuga", "loro", "manzana", "naranja", "oso",
-    "pato", "pez", "reloj", "sandia", "tijeras", "tiza",
+  const LIST1 = [
+    "manzana", "oso", "reloj", "tijeras", "sandia", "pato",
+    "grapadora", "cinta", "fresas", "tiza", "caballo", "elote",
   ];
+  const LIST2 = [
+    "hongos", "cebolla", "cuaderno", "ardilla", "loro", "lechuga",
+    "lapiz", "conejo", "gato", "naranja", "basurero", "pez",
+  ];
+  const WORDS = [...LIST1, ...LIST2];
   const TALKERS = [1, 2, 3, 4, 5, 6];
 
   // ---------- DOM refs ----------
@@ -59,13 +62,13 @@
     const blocks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
 
     const conditionList = numericId % 2 === 0 ? 'A' : 'B';
+    // Align Single/Multi assignment to Stimuli_List.xlsx: List1 vs List2
     const wordCondition = {};
-    WORDS.forEach((w, idx) => {
-      if (conditionList === 'A') {
-        wordCondition[w] = idx < 12 ? 'Single' : 'Multi';
-      } else {
-        wordCondition[w] = idx < 12 ? 'Multi' : 'Single';
-      }
+    LIST1.forEach((w) => {
+      wordCondition[w] = conditionList === 'A' ? 'Single' : 'Multi';
+    });
+    LIST2.forEach((w) => {
+      wordCondition[w] = conditionList === 'A' ? 'Multi' : 'Single';
     });
 
     const exposureOrder = (numericId % 4 === 0 || numericId % 4 === 1)
