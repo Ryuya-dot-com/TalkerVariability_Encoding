@@ -44,6 +44,11 @@
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
   const setStatus = (txt) => statusEl.textContent = txt;
   const setLog = (txt) => logEl.textContent = txt;
+  const setStatusLogVisible = (visible) => {
+    const displayValue = visible ? '' : 'none';
+    statusEl.style.display = displayValue;
+    logEl.style.display = displayValue;
+  };
 
   function hideProgress() {
     progressEl.style.display = 'none';
@@ -215,6 +220,7 @@
     messageEl.style.display = 'none';
     fixationEl.style.display = 'block';
     document.body.classList.add('presenting');
+    setStatusLogVisible(false);
   }
 
   function showMessage(text) {
@@ -224,6 +230,7 @@
     fixationEl.style.display = 'none';
     messageEl.textContent = text;
     messageEl.style.display = 'block';
+    setStatusLogVisible(true);
   }
 
   function showImage(word, images) {
@@ -233,6 +240,7 @@
     imgEl.src = images[word].src;
     imgEl.style.display = 'block';
     document.body.classList.add('presenting');
+    setStatusLogVisible(false);
   }
 
   let preparedSession = null;
@@ -244,6 +252,7 @@
     downloadBtn.classList.add('hidden');
     setStatus('');
     setLog('');
+    setStatusLogVisible(true);
   }
 
   function exitExperimentScreen() {
@@ -252,6 +261,7 @@
     document.body.classList.remove('running');
     document.body.classList.remove('presenting');
     hideProgress();
+    setStatusLogVisible(true);
   }
 
   function waitForResponse(timeoutMs, audioStartMs) {
