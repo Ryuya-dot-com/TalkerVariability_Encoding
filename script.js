@@ -214,9 +214,11 @@
     imgEl.style.display = 'none';
     messageEl.style.display = 'none';
     fixationEl.style.display = 'block';
+    document.body.classList.add('presenting');
   }
 
   function showMessage(text) {
+    document.body.classList.remove('presenting');
     hideProgress();
     imgEl.style.display = 'none';
     fixationEl.style.display = 'none';
@@ -230,6 +232,7 @@
     messageEl.style.display = 'none';
     imgEl.src = images[word].src;
     imgEl.style.display = 'block';
+    document.body.classList.add('presenting');
   }
 
   let preparedSession = null;
@@ -247,6 +250,7 @@
     configEl.classList.remove('hidden');
     preloadBtn.classList.remove('hidden');
     document.body.classList.remove('running');
+    document.body.classList.remove('presenting');
     hideProgress();
   }
 
