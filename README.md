@@ -8,7 +8,8 @@ Summary of the browser-based learning phase and logging. Open `index.html` in a 
 - Reload/back actions raise warnings. Do not refresh or use the back button during the task.
 
 ## Presentation sequence
-- 12 blocks (1–6 = Session 1, 7–12 = Session 2). Each block has 24 trials (all 24 words once).
+- 24 blocks: 12 encounters of the Single (no variability) list followed by 12 encounters of the Multi (high variability) list, or the reverse for counterbalancing (see below). Each block has 12 trials containing only one condition.
+- Session 1 = blocks 1–12 (first-presented condition), Session 2 = blocks 13–24 (second condition).
 - 12 s rest between blocks. ITI inside blocks is 1 s; only the fixation and the top progress bar are shown.
 - Within-trial timing (fixed):  
   1) Show image.  
@@ -17,9 +18,10 @@ Summary of the browser-based learning phase and logging. Open `index.html` in a 
 
 ## Condition assignment (participant ID)
 - Even numeric ID → Condition A (LIST1 = Single, LIST2 = Multi). Odd → Condition B (LIST1 = Multi, LIST2 = Single).
+- Exposure order: Single-first if `ID % 4` is 0 or 1; otherwise Multi-first. This counterbalances whether words 1–12 (Single) or 13–24 (Multi) are learned first.
 - Single talker `nvTalker` = (ID % 6), with 0 replaced by 6.
-- Multi talkers: shuffle 1–6 twice with the seeded RNG; assign one talker per block (each talker appears twice across 12 blocks).
-- Item order: seed-shuffle the 24 words using the participant ID, split into Single/Multi. Single-first vs Multi-first flips between the first and second half of blocks (decided by ID % 4).
+- Multi talkers: shuffle 1–6 twice with the seeded RNG; assign one talker per Multi block (each talker appears twice across 12 Multi blocks).
+- Item order: seed-shuffle words within each condition once per participant and repeat that order across all 12 encounters of that condition.
 
 ## Logging and CSV
 - At the end, download `learning_phase_{participantId}_all_sessions.csv`.  

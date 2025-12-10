@@ -91,17 +91,9 @@
     const singleRemainder = numericId % 6;
     const nvTalker = singleRemainder === 0 ? 6 : singleRemainder;
 
-    const blocks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-
     const conditionList = numericId % 2 === 0 ? 'A' : 'B';
-    // Align Single/Multi assignment to Stimuli_List.xlsx: List1 vs List2
-    const wordCondition = {};
-    LIST1.forEach((w) => {
-      wordCondition[w] = conditionList === 'A' ? 'Single' : 'Multi';
-    });
-    LIST2.forEach((w) => {
-      wordCondition[w] = conditionList === 'A' ? 'Multi' : 'Single';
-    });
+    const singleWords = conditionList === 'A' ? LIST1 : LIST2;
+    const multiWords = conditionList === 'A' ? LIST2 : LIST1;
 
     const exposureOrder = (numericId % 4 === 0 || numericId % 4 === 1)
       ? 'Single-first'
@@ -109,9 +101,8 @@
 
     // Item order per participant
     const orderRng = mulberry32(numericId * 1000 + 7);
-    const baseOrder = seededShuffle(WORDS, orderRng);
-    const singleOrder = baseOrder.filter(w => wordCondition[w] === 'Single');
-    const multiOrder = baseOrder.filter(w => wordCondition[w] === 'Multi');
+    const singleOrder = seededShuffle(singleWords, orderRng);
+    const multiOrder = seededShuffle(multiWords, orderRng);
 
     // Talker rotation for Multi
     const talkerRng = mulberry32(numericId * 1000 + 99);
@@ -119,41 +110,44 @@
     const cycleTwo = seededShuffle(TALKERS, talkerRng);
     const multiTalkerSequence = [...cycleOne, ...cycleTwo]; // length 12
 
-    const blockConditionOrder = (blockNum) => {
-      const firstHalf = blockNum <= 6;
-      if (exposureOrder === 'Single-first') {
-        return firstHalf ? ['Single', 'Multi'] : ['Multi', 'Single'];
-      }
-      return firstHalf ? ['Multi', 'Single'] : ['Single', 'Multi'];
-    };
-
     const trials = [];
     const talkersByWord = new Map();
+    const addTalker = (word, talker) => {
+      if (!talkersByWord.has(word)) talkersByWord.set(word, new Set());
+      talkersByWord.get(word).add(talker);
+    };
 
-    blocks.forEach((block) => {
-      const [firstCond, secondCond] = blockConditionOrder(block);
-      const orderedWords = [
-        ...(firstCond === 'Single' ? singleOrder : multiOrder),
-        ...(secondCond === 'Single' ? singleOrder : multiOrder),
-      ];
-      const multiTalkerForBlock = multiTalkerSequence[block - 1];
+    const conditionSequence = exposureOrder === 'Single-first'
+      ? ['Single', 'Multi']
+      : ['Multi', 'Single'];
 
-      orderedWords.forEach((word) => {
-        const cond = wordCondition[word];
-        const talker = cond === 'Single' ? nvTalker : multiTalkerForBlock;
-        const groupNum = Math.floor(WORDS.indexOf(word) / 6) + 1;
-        const session = block <= 6 ? 1 : 2;
-        trials.push({
-          block,
-          group: groupNum,
-          condition: cond,
-          word,
-          talker,
-          session,
+    let block = 0;
+    let multiBlockIndex = 0;
+    const encountersPerCondition = 12;
+
+    conditionSequence.forEach((condition) => {
+      const words = condition === 'Single' ? singleOrder : multiOrder;
+      for (let encounter = 1; encounter <= encountersPerCondition; encounter++) {
+        block += 1;
+        const talker = condition === 'Single'
+          ? nvTalker
+          : multiTalkerSequence[multiBlockIndex];
+        if (condition === 'Multi') multiBlockIndex += 1;
+        const session = block <= encountersPerCondition ? 1 : 2;
+
+        words.forEach((word) => {
+          const groupNum = Math.floor(WORDS.indexOf(word) / 6) + 1;
+          trials.push({
+            block,
+            group: groupNum,
+            condition,
+            word,
+            talker,
+            session,
+          });
+          addTalker(word, talker);
         });
-        if (!talkersByWord.has(word)) talkersByWord.set(word, new Set());
-        talkersByWord.get(word).add(talker);
-      });
+      }
     });
 
     return {
