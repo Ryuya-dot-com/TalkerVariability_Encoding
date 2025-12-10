@@ -23,11 +23,38 @@
   const imgEl = document.getElementById('stimulus-img');
   const participantInput = document.getElementById('participant-id');
   const configEl = document.getElementById('config');
+  const progressEl = document.getElementById('progress');
+  const progressFillEl = document.getElementById('progress-fill');
+  const progressLabelEl = document.getElementById('progress-label');
+
+  // Warn on reload/back
+  window.addEventListener('beforeunload', (e) => {
+    e.preventDefault();
+    e.returnValue = 'このページを離れると実験が中断されます。本当に移動しますか？';
+  });
+  if (history && history.pushState) {
+    history.pushState(null, '', location.href);
+    window.addEventListener('popstate', () => {
+      alert('このページを離れると実験が中断されます。戻る操作は使用しないでください。');
+      history.pushState(null, '', location.href);
+    });
+  }
 
   // ---------- Helpers ----------
   const delay = (ms) => new Promise((res) => setTimeout(res, ms));
   const setStatus = (txt) => statusEl.textContent = txt;
   const setLog = (txt) => logEl.textContent = txt;
+
+  function hideProgress() {
+    progressEl.style.display = 'none';
+  }
+
+  function showProgressBar(done, total) {
+    const pct = total === 0 ? 0 : Math.min(100, Math.max(0, (done / total) * 100));
+    progressFillEl.style.width = `${pct}%`;
+    progressLabelEl.textContent = `${done}/${total} (${pct.toFixed(1)}%)`;
+    progressEl.style.display = 'flex';
+  }
 
   function mulberry32(seed) {
     return function() {
@@ -190,6 +217,7 @@
   }
 
   function showMessage(text) {
+    hideProgress();
     imgEl.style.display = 'none';
     fixationEl.style.display = 'none';
     messageEl.textContent = text;
@@ -197,6 +225,7 @@
   }
 
   function showImage(word, images) {
+    hideProgress();
     fixationEl.style.display = 'none';
     messageEl.style.display = 'none';
     imgEl.src = images[word].src;
@@ -218,34 +247,36 @@
     configEl.classList.remove('hidden');
     preloadBtn.classList.remove('hidden');
     document.body.classList.remove('running');
+    hideProgress();
   }
 
   function waitForResponse(timeoutMs, audioStartMs) {
     return new Promise((resolve) => {
       let settled = false;
+      let firstRt = null;
       const cleanup = () => {
         clearTimeout(timer);
         document.removeEventListener('keydown', handler);
       };
       const handler = (ev) => {
         if (ev.key === 'Escape') {
-          cleanup();
-          settled = true;
-          resolve({ aborted: true, rt: null });
+          if (!settled) {
+            settled = true;
+            cleanup();
+            resolve({ aborted: true, rt: null });
+          }
           return;
         }
-        if (!settled) {
+        if (firstRt === null) {
           const rtMs = performance.now() - audioStartMs;
-          cleanup();
-          settled = true;
-          resolve({ aborted: false, rt: rtMs / 1000 });
+          firstRt = rtMs / 1000;
         }
       };
       const timer = setTimeout(() => {
         if (!settled) {
-          cleanup();
           settled = true;
-          resolve({ aborted: false, rt: null });
+          cleanup();
+          resolve({ aborted: false, rt: firstRt });
         }
       }, timeoutMs);
       document.addEventListener('keydown', handler);
@@ -253,7 +284,7 @@
   }
 
   function buildCsv(results, participantId) {
-    const header = ["trial","session","block","group","condition","talker","word","word_count","image_file","audio_file","onset_time","response_time"];
+    const header = ["trial","session","block","group","condition","talker","word","word_count","image_file","audio_file","image_onset_time","audio_onset_time","response_time"];
     const rows = [header.join(',')];
     results.forEach((r) => {
       rows.push([
@@ -267,7 +298,8 @@
         r.wordCount,
         `${r.word}.jpg`,
         `T${r.talker}_${r.word}_normal.wav`,
-        r.onset.toFixed(3),
+        r.imageOnset.toFixed(3),
+        r.audioOnset.toFixed(3),
         r.responseTime === null ? 'NA' : r.responseTime.toFixed(3),
       ].join(','));
     });
@@ -290,28 +322,34 @@
       document.addEventListener('keydown', handler);
     });
 
+    setStatus('');
+    hideProgress();
+
     const { trials } = schedule;
     const { images, sounds } = assets;
     const wordCounts = new Map();
     const results = [];
     const expStart = performance.now();
     let prevBlock = null;
-    setLog('実験中...');
+    setLog('');
 
     for (let i = 0; i < trials.length; i++) {
       const trial = trials[i];
 
       // 12s between blocks (before the first trial of a new block, except block1)
       if (prevBlock !== null && trial.block !== prevBlock) {
+        showProgressBar(results.length, trials.length);
         showFixation();
-        setStatus(`次のブロック${trial.block}まで休憩中 (12秒)`);
+        setStatus('');
         await delay(12000);
       }
       prevBlock = trial.block;
 
       // Present image
+      hideProgress();
+      setStatus('');
       showImage(trial.word, images);
-      const onset = (performance.now() - expStart) / 1000;
+      const imageOnset = (performance.now() - expStart) / 1000;
       await delay(750);
 
       // Play audio
@@ -319,6 +357,7 @@
       audio.currentTime = 0;
       audio.play();
       const audioStart = performance.now();
+      const audioOnset = (audioStart - expStart) / 1000;
 
       // Collect response (max 4.25s after audio onset)
       const { aborted, rt } = await waitForResponse(4250, audioStart);
@@ -341,15 +380,17 @@
         talker: trial.talker,
         word: trial.word,
         wordCount: count,
-        onset,
+        imageOnset,
+        audioOnset,
         responseTime: rt,
       });
 
       // ITI: only within block; 1s fixed
       const nextTrial = trials[i + 1];
       if (nextTrial && nextTrial.block === trial.block) {
+        showProgressBar(results.length, trials.length);
         showFixation();
-        setStatus(`ITI 1秒 (trial ${i + 1}/${trials.length})`);
+        setStatus('');
         await delay(1000);
       }
     }
