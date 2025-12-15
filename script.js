@@ -49,6 +49,18 @@
     statusEl.style.display = displayValue;
     logEl.style.display = displayValue;
   };
+  const waitForSpace = (promptText = 'スペースキーで進む') => {
+    showMessage(promptText);
+    return new Promise((resolve) => {
+      const handler = (ev) => {
+        if (ev.key === ' ') {
+          document.removeEventListener('keydown', handler);
+          resolve();
+        }
+      };
+      document.addEventListener('keydown', handler);
+    });
+  };
 
   function hideProgress() {
     progressEl.style.display = 'none';
@@ -317,18 +329,7 @@
   async function runExperiment(participantId, schedule, assets) {
     document.body.classList.add('running');
     setStatus('準備ができたらスペースキーで開始してください');
-    showMessage('スペースキーで開始');
-
-    // Wait for space to start
-    await new Promise((resolve) => {
-      const handler = (ev) => {
-        if (ev.key === ' ') {
-          document.removeEventListener('keydown', handler);
-          resolve();
-        }
-      };
-      document.addEventListener('keydown', handler);
-    });
+    await waitForSpace('スペースキーで開始');
 
     setStatus('');
     hideProgress();
@@ -344,12 +345,13 @@
     for (let i = 0; i < trials.length; i++) {
       const trial = trials[i];
 
-      // 12s between blocks (before the first trial of a new block, except block1)
+      // Between blocks: show progress and wait for space to continue
       if (prevBlock !== null && trial.block !== prevBlock) {
         showProgressBar(results.length, trials.length);
-        showFixation();
+        showMessage(`ブロック ${prevBlock} が終わりました。次のブロックに進むにはスペースキーを押してください。`);
+        await waitForSpace();
         setStatus('');
-        await delay(12000);
+        hideProgress();
       }
       prevBlock = trial.block;
 
