@@ -1,57 +1,352 @@
-// Learning Phase browser implementation
 (() => {
-  // ---------- Constants ----------
-  const LIST1 = [
-    "manzana", "oso", "reloj", "tijeras", "sandia", "pato",
-    "grapadora", "cinta", "fresas", "tiza", "caballo", "elote",
+  // Session / stimulus definitions
+  const LIST1_TARGETS = [
+    { id: 1, list: 1, word: 'manzana' },
+    { id: 2, list: 1, word: 'oso' },
+    { id: 3, list: 1, word: 'reloj' },
+    { id: 4, list: 1, word: 'tijeras' },
+    { id: 5, list: 1, word: 'sandía' },
+    { id: 6, list: 1, word: 'pato' },
+    { id: 7, list: 1, word: 'grapadora' },
+    { id: 8, list: 1, word: 'cinta' },
+    { id: 9, list: 1, word: 'fresas' },
+    { id: 10, list: 1, word: 'tiza' },
+    { id: 11, list: 1, word: 'caballo' },
+    { id: 12, list: 1, word: 'elote' },
   ];
-  const LIST2 = [
-    "hongos", "cebolla", "cuaderno", "ardilla", "loro", "lechuga",
-    "lapiz", "conejo", "gato", "naranja", "basurero", "pez",
+  const LIST2_TARGETS = [
+    { id: 13, list: 2, word: 'hongos' },
+    { id: 14, list: 2, word: 'cebolla' },
+    { id: 15, list: 2, word: 'cuaderno' },
+    { id: 16, list: 2, word: 'ardilla' },
+    { id: 17, list: 2, word: 'loro' },
+    { id: 18, list: 2, word: 'lechuga' },
+    { id: 19, list: 2, word: 'lápiz' },
+    { id: 20, list: 2, word: 'conejo' },
+    { id: 21, list: 2, word: 'gato' },
+    { id: 22, list: 2, word: 'naranja' },
+    { id: 23, list: 2, word: 'basurero' },
+    { id: 24, list: 2, word: 'pez' },
   ];
-  const WORDS = [...LIST1, ...LIST2];
-  const TALKERS = [1, 2, 3, 4, 5, 6];
+  const PRACTICE_TARGETS = [
+    { id: 1, list: 0, word: 'elephant' },
+    { id: 2, list: 0, word: 'fox' },
+    { id: 3, list: 0, word: 'giraffe' },
+    { id: 4, list: 0, word: 'hippopotamus' },
+    { id: 5, list: 0, word: 'monkey' },
+  ];
 
-  // ---------- DOM refs ----------
+  const SESSION_CONFIGS = {
+    production: {
+      key: 'production',
+      label: '本番（24試行）',
+      note: 'これから24枚の写真が提示されます。写真が提示されたらできるだけ早くスペイン語の単語を声に出してください。',
+      imageBaseUrl: 'https://ryuya-dot-com.github.io/TalkerVariability_Encoding/images',
+      imageExt: '.jpg',
+      recordDurationMs: 6000,
+      itiMs: 1500,
+      restMs: 5000,
+      buildOrder: buildProductionOrder,
+      recordingEnabled: true,
+      csvFileName: (pid) => `results_${pid}.csv`,
+      zipFileName: (pid) => `production_${pid}.zip`,
+      recordingFileName: (pid, word) => `${pid}_${word}.wav`,
+    },
+    practice: {
+      key: 'practice',
+      label: '練習',
+      note: '英語で練習してみましょう。写真が出たら即座に動物の名前を英語で言ってみましょう。',
+      imageBaseUrl: 'practice',
+      imageExt: '.png',
+      recordDurationMs: 6000,
+      itiMs: 1500,
+      restMs: 5000,
+      buildOrder: buildPracticeOrder,
+      recordingEnabled: false,
+      csvFileName: (pid) => `results_practice_${pid}.csv`,
+      zipFileName: (pid) => `practice_${pid}.zip`,
+      recordingFileName: (pid, word) => `${pid}_practice_${word}.wav`,
+    },
+  };
+  const DEFAULT_SESSION_KEY = 'production';
+
+  // DOM
   const preloadBtn = document.getElementById('preload-btn');
   const startBtn = document.getElementById('start-btn');
-  const downloadBtn = document.getElementById('download-btn');
   const statusEl = document.getElementById('status');
   const logEl = document.getElementById('log');
   const fixationEl = document.getElementById('fixation');
   const messageEl = document.getElementById('message');
   const imgEl = document.getElementById('stimulus-img');
   const participantInput = document.getElementById('participant-id');
+  const downloadBtn = document.getElementById('download-btn');
   const configEl = document.getElementById('config');
-  const progressEl = document.getElementById('progress');
-  const progressFillEl = document.getElementById('progress-fill');
-  const progressLabelEl = document.getElementById('progress-label');
+  const progressContainer = document.getElementById('progress-container');
+  const progressBar = document.getElementById('progress-bar');
 
   // Warn on reload/back
   window.addEventListener('beforeunload', (e) => {
     e.preventDefault();
-    e.returnValue = 'このページを離れると実験が中断されます。本当に移動しますか？';
+    e.returnValue = 'Leaving this page will interrupt the task. Are you sure?';
   });
   if (history && history.pushState) {
     history.pushState(null, '', location.href);
     window.addEventListener('popstate', () => {
-      alert('このページを離れると実験が中断されます。戻る操作は使用しないでください。');
+      alert('Going back will interrupt the task. Please avoid navigating away.');
       history.pushState(null, '', location.href);
     });
   }
 
-  // ---------- Helpers ----------
-  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+  // Helpers
   const setStatus = (txt) => statusEl.textContent = txt;
   const setLog = (txt) => logEl.textContent = txt;
-  const setStatusLogVisible = (visible) => {
-    const displayValue = visible ? '' : 'none';
-    statusEl.style.display = displayValue;
-    logEl.style.display = displayValue;
+  const delay = (ms) => new Promise(res => setTimeout(res, ms));
+  const stripAccents = (str) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const hideProgress = () => {
+    if (progressContainer) progressContainer.style.display = 'none';
   };
-  const waitForSpace = (promptText = 'スペースキーで進む') => {
-    showMessage(promptText);
-    return new Promise((resolve) => {
+  const updateProgress = (completed, total) => {
+    if (!progressContainer || !progressBar) return;
+    const safeTotal = Math.max(1, total || 1);
+    const pct = Math.min(100, Math.max(0, (completed / safeTotal) * 100));
+    progressBar.style.width = `${pct}%`;
+    progressContainer.style.display = 'block';
+  };
+
+  function mulberry32(seed) {
+    return function() {
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  function seededShuffle(arr, rng) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+  const parseNumericId = (pid) => {
+    const digits = pid.match(/\d+/g);
+    return digits ? parseInt(digits.join(''), 10) : 0;
+  };
+  const makeImageFileName = (word, ext) => `${stripAccents(word)}${ext}`;
+  function buildProductionOrder(participantId) {
+    const n = parseNumericId(participantId);
+    const rng = mulberry32(n * 1000 + 7);
+    const list1 = seededShuffle(LIST1_TARGETS, rng);
+    const list2 = seededShuffle(LIST2_TARGETS, rng);
+    let takeFirst = n % 2 === 1; // odd -> List 1 first, even -> List 2 first
+    const ordered = [];
+    let i = 0;
+    let j = 0;
+    while (i < list1.length || j < list2.length) {
+      if (takeFirst && i < list1.length) {
+        ordered.push(list1[i++]);
+      } else if (!takeFirst && j < list2.length) {
+        ordered.push(list2[j++]);
+      } else if (i < list1.length) {
+        ordered.push(list1[i++]);
+      } else if (j < list2.length) {
+        ordered.push(list2[j++]);
+      }
+      takeFirst = !takeFirst;
+    }
+    return ordered.map((item) => {
+      return {
+        word: item.word,
+        word_id: item.id,
+        list: item.list,
+        image_file: makeImageFileName(item.word, SESSION_CONFIGS.production.imageExt),
+      };
+    });
+  }
+
+  function buildPracticeOrder(participantId) {
+    const n = parseNumericId(participantId);
+    const rng = mulberry32(n * 1000 + 17);
+    const ordered = seededShuffle(PRACTICE_TARGETS, rng);
+    return ordered.map((item) => ({
+      word: item.word,
+      word_id: item.id,
+      list: item.list,
+      image_file: makeImageFileName(item.word, SESSION_CONFIGS.practice.imageExt),
+    }));
+  }
+
+  async function preloadImages(order, imageBaseUrl) {
+    const images = new Map();
+    let loaded = 0;
+    const total = order.length;
+    for (const item of order) {
+      const url = `${imageBaseUrl}/${item.image_file}`;
+      setStatus(`画像プリロード中 (${loaded + 1}/${total})`);
+      await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => { images.set(item.word, img); loaded += 1; resolve(); };
+        img.onerror = () => reject(new Error(`画像が読み込めません: ${url}`));
+        img.src = url;
+      });
+    }
+    setStatus(`画像プリロード完了 (${loaded}/${total})`);
+    return images;
+  }
+
+  async function getMicStream() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      return stream;
+    } catch (err) {
+      throw new Error(`マイクアクセスに失敗しました: ${err.message}`);
+    }
+  }
+
+  function showFixation(progress) {
+    imgEl.style.display = 'none';
+    messageEl.style.display = 'none';
+    fixationEl.style.display = 'block';
+    if (progress && typeof progress.completed === 'number' && typeof progress.total === 'number') {
+      updateProgress(progress.completed, progress.total);
+    } else {
+      hideProgress();
+    }
+  }
+  function showMessage(text) {
+    fixationEl.style.display = 'none';
+    imgEl.style.display = 'none';
+    messageEl.textContent = text;
+    messageEl.style.display = 'block';
+    hideProgress();
+  }
+  function showImage(word, images) {
+    fixationEl.style.display = 'none';
+    messageEl.style.display = 'none';
+    const img = images.get(word);
+    imgEl.src = img.src;
+    imgEl.style.display = 'block';
+    hideProgress();
+  }
+  function enterExperimentScreen() {
+    configEl.classList.add('hidden');
+    startBtn.classList.add('hidden');
+    downloadBtn.classList.add('hidden');
+  }
+
+  // PCM収集→WAVエンコード
+  function encodeWav(buffers, sampleRate) {
+    const totalLength = buffers.reduce((sum, buf) => sum + buf.length, 0);
+    const resultBuffer = new ArrayBuffer(44 + totalLength * 2);
+    const view = new DataView(resultBuffer);
+
+    function writeString(view, offset, string) {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    }
+
+    let offset = 0;
+    writeString(view, offset, 'RIFF'); offset += 4;
+    view.setUint32(offset, 36 + totalLength * 2, true); offset += 4;
+    writeString(view, offset, 'WAVE'); offset += 4;
+    writeString(view, offset, 'fmt '); offset += 4;
+    view.setUint32(offset, 16, true); offset += 4; // Subchunk1Size
+    view.setUint16(offset, 1, true); offset += 2; // PCM
+    view.setUint16(offset, 1, true); offset += 2; // mono
+    view.setUint32(offset, sampleRate, true); offset += 4;
+    view.setUint32(offset, sampleRate * 2, true); offset += 4; // byte rate
+    view.setUint16(offset, 2, true); offset += 2; // block align
+    view.setUint16(offset, 16, true); offset += 2; // bits per sample
+    writeString(view, offset, 'data'); offset += 4;
+    view.setUint32(offset, totalLength * 2, true); offset += 4;
+
+    let outOffset = offset;
+    buffers.forEach((buf) => {
+      for (let i = 0; i < buf.length; i++, outOffset += 2) {
+        const s = Math.max(-1, Math.min(1, buf[i]));
+        view.setInt16(outOffset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+      }
+    });
+
+    return new Blob([view], { type: 'audio/wav' });
+  }
+
+  function makePcmRecorder(stream) {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 44100 });
+    const source = audioCtx.createMediaStreamSource(stream);
+    const bufferSize = 4096;
+    const processor = audioCtx.createScriptProcessor(bufferSize, 1, 1);
+    const chunks = [];
+    let recording = false;
+
+    processor.onaudioprocess = (e) => {
+      if (!recording) return;
+      const input = e.inputBuffer.getChannelData(0);
+      chunks.push(new Float32Array(input));
+    };
+
+    const start = async () => {
+      recording = true;
+      source.connect(processor);
+      processor.connect(audioCtx.destination);
+    };
+
+    const stopAfter = (ms) => new Promise((resolve) => {
+      setTimeout(() => {
+        recording = false;
+        processor.disconnect();
+        source.disconnect();
+        const wavBlob = encodeWav(chunks, audioCtx.sampleRate);
+        audioCtx.close();
+        resolve(wavBlob);
+      }, ms);
+    });
+
+    return { start, stopAfter };
+  }
+
+  function buildCsv(rows) {
+    const header = [
+      'trial','word','word_id','list','image_file',
+      'trial_start_epoch_ms',
+      'image_onset_ms',
+      'image_onset_epoch_ms',
+      'recording_start_ms','recording_end_ms',
+      'recording_start_epoch_ms','recording_end_epoch_ms',
+      'iti_ms','participant_id','recording_file'
+    ];
+    const lines = [header.join(',')];
+    rows.forEach((r) => {
+      lines.push([
+        r.trial,
+        r.word,
+        r.word_id,
+        r.list,
+        r.image_file,
+        r.trial_start_epoch_ms,
+        r.image_onset_ms.toFixed(3),
+        r.image_onset_epoch_ms,
+        r.recording_start_ms.toFixed(3),
+        r.recording_end_ms.toFixed(3),
+        r.recording_start_epoch_ms,
+        r.recording_end_epoch_ms,
+        r.iti_ms,
+        r.participant_id,
+        r.recording_file,
+      ].join(','));
+    });
+    return lines.join('\n');
+  }
+
+  async function runTask(participantId, order, images, micStream, sessionConfig) {
+    const { recordDurationMs, itiMs, restMs, label, recordingEnabled, recordingFileName } = sessionConfig;
+    document.body.classList.add('running');
+    showMessage('スペースキーで開始');
+    setStatus(`${label} - 準備ができたらスペースキーで開始してください`);
+
+    await new Promise((resolve) => {
       const handler = (ev) => {
         if (ev.key === ' ') {
           document.removeEventListener('keydown', handler);
@@ -60,358 +355,101 @@
       };
       document.addEventListener('keydown', handler);
     });
-  };
 
-  function hideProgress() {
-    progressEl.style.display = 'none';
-  }
-
-  function showProgressBar(done, total) {
-    const pct = total === 0 ? 0 : Math.min(100, Math.max(0, (done / total) * 100));
-    progressFillEl.style.width = `${pct}%`;
-    progressLabelEl.textContent = `${done}/${total} (${pct.toFixed(1)}%)`;
-    progressEl.style.display = 'flex';
-  }
-
-  function mulberry32(seed) {
-    return function() {
-      seed |= 0;
-      seed = seed + 0x6D2B79F5 | 0;
-      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-  }
-
-  function seededShuffle(array, rng) {
-    const arr = array.slice();
-    for (let i = arr.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
-    }
-    return arr;
-  }
-
-  function parseNumericId(participantId) {
-    const digits = participantId.match(/\d+/g);
-    if (!digits) return 0;
-    return parseInt(digits.join(''), 10);
-  }
-
-  function buildSchedule(participantId) {
-    const numericId = parseNumericId(participantId);
-    const singleRemainder = numericId % 6;
-    const nvTalker = singleRemainder === 0 ? 6 : singleRemainder;
-
-    const conditionList = numericId % 2 === 0 ? 'A' : 'B';
-    const singleWords = conditionList === 'A' ? LIST1 : LIST2;
-    const multiWords = conditionList === 'A' ? LIST2 : LIST1;
-
-    const exposureOrder = (numericId % 4 === 0 || numericId % 4 === 1)
-      ? 'Single-first'
-      : 'Multi-first';
-
-    // Item order per participant
-    const orderRng = mulberry32(numericId * 1000 + 7);
-    const singleOrder = seededShuffle(singleWords, orderRng);
-    const multiOrder = seededShuffle(multiWords, orderRng);
-
-    // Talker rotation for Multi
-    const talkerRng = mulberry32(numericId * 1000 + 99);
-    const cycleOne = seededShuffle(TALKERS, talkerRng);
-    const cycleTwo = seededShuffle(TALKERS, talkerRng);
-    const multiTalkerSequence = [...cycleOne, ...cycleTwo]; // length 12
-
-    const trials = [];
-    const talkersByWord = new Map();
-    const addTalker = (word, talker) => {
-      if (!talkersByWord.has(word)) talkersByWord.set(word, new Set());
-      talkersByWord.get(word).add(talker);
-    };
-
-    const conditionSequence = exposureOrder === 'Single-first'
-      ? ['Single', 'Multi']
-      : ['Multi', 'Single'];
-
-    let block = 0;
-    let multiBlockIndex = 0;
-    const encountersPerCondition = 12;
-
-    conditionSequence.forEach((condition) => {
-      const words = condition === 'Single' ? singleOrder : multiOrder;
-      for (let encounter = 1; encounter <= encountersPerCondition; encounter++) {
-        block += 1;
-        const talker = condition === 'Single'
-          ? nvTalker
-          : multiTalkerSequence[multiBlockIndex];
-        if (condition === 'Multi') multiBlockIndex += 1;
-        const session = block <= encountersPerCondition ? 1 : 2;
-
-        words.forEach((word) => {
-          const groupNum = Math.floor(WORDS.indexOf(word) / 6) + 1;
-          trials.push({
-            block,
-            group: groupNum,
-            condition,
-            word,
-            talker,
-            session,
-          });
-          addTalker(word, talker);
-        });
-      }
-    });
-
-    return {
-      numericId,
-      nvTalker,
-      conditionList,
-      exposureOrder,
-      multiTalkerSequence,
-      trials,
-      talkersByWord,
-    };
-  }
-
-  async function preloadAssets(talkersByWord) {
-    const tasks = [];
-    const totalItems = WORDS.length + Array.from(talkersByWord.values()).reduce((acc, set) => acc + set.size, 0);
-    let loaded = 0;
-
-    const updateProgress = () => {
-      const pct = totalItems === 0 ? 100 : ((loaded / totalItems) * 100).toFixed(1);
-      setStatus(`準備中: ${loaded}/${totalItems} (${pct}%)`);
-    };
-
-    const images = {};
-    const sounds = {};
-
-    WORDS.forEach((word) => {
-      tasks.push(new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => {
-          images[word] = img;
-          loaded += 1; updateProgress();
-          resolve();
-        };
-        img.onerror = () => reject(new Error(`画像が見つかりません: images/${word}.jpg`));
-        img.src = `images/${word}.jpg`;
-      }));
-    });
-
-    talkersByWord.forEach((talkerSet, word) => {
-      talkerSet.forEach((talker) => {
-        tasks.push(new Promise((resolve, reject) => {
-          const audio = new Audio();
-          audio.preload = 'auto';
-          audio.oncanplaythrough = () => {
-            if (!sounds[word]) sounds[word] = {};
-            sounds[word][talker] = audio;
-            loaded += 1; updateProgress();
-            resolve();
-          };
-          audio.onerror = () => reject(new Error(`音声が見つかりません: audio/T${talker}_${word}_normal.wav`));
-          audio.src = `audio/T${talker}_${word}_normal.wav`;
-        }));
-      });
-    });
-
-    updateProgress();
-    await Promise.all(tasks);
-    return { images, sounds };
-  }
-
-  function showFixation() {
-    imgEl.style.display = 'none';
+    // Hide instructions once started
     messageEl.style.display = 'none';
-    fixationEl.style.display = 'block';
-    document.body.classList.add('presenting');
-    setStatusLogVisible(false);
-  }
-
-  function showMessage(text) {
-    document.body.classList.remove('presenting');
-    hideProgress();
-    imgEl.style.display = 'none';
-    fixationEl.style.display = 'none';
-    messageEl.textContent = text;
-    messageEl.style.display = 'block';
-    setStatusLogVisible(true);
-  }
-
-  function showImage(word, images) {
-    hideProgress();
-    fixationEl.style.display = 'none';
-    messageEl.style.display = 'none';
-    imgEl.src = images[word].src;
-    imgEl.style.display = 'block';
-    document.body.classList.add('presenting');
-    setStatusLogVisible(false);
-  }
-
-  let preparedSession = null;
-
-  function enterExperimentScreen() {
-    configEl.classList.add('hidden');
-    preloadBtn.classList.add('hidden');
-    startBtn.classList.add('hidden');
-    downloadBtn.classList.add('hidden');
-    setStatus('');
+    statusEl.textContent = '';
     setLog('');
-    setStatusLogVisible(true);
-  }
-
-  function exitExperimentScreen() {
-    configEl.classList.remove('hidden');
-    preloadBtn.classList.remove('hidden');
-    document.body.classList.remove('running');
-    document.body.classList.remove('presenting');
     hideProgress();
-    setStatusLogVisible(true);
-  }
+    setLog('');
 
-  function waitForResponse(timeoutMs, audioStartMs) {
-    return new Promise((resolve) => {
-      let settled = false;
-      let firstRt = null;
-      const cleanup = () => {
-        clearTimeout(timer);
-        document.removeEventListener('keydown', handler);
-      };
-      const handler = (ev) => {
-        if (ev.key === 'Escape') {
-          if (!settled) {
-            settled = true;
-            cleanup();
-            resolve({ aborted: true, rt: null });
-          }
-          return;
-        }
-        if (firstRt === null) {
-          const rtMs = performance.now() - audioStartMs;
-          firstRt = rtMs / 1000;
-        }
-      };
-      const timer = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          cleanup();
-          resolve({ aborted: false, rt: firstRt });
-        }
-      }, timeoutMs);
-      document.addEventListener('keydown', handler);
-    });
-  }
-
-  function buildCsv(results, participantId) {
-    const header = ["trial","session","block","group","condition","talker","word","word_count","image_file","audio_file","image_onset_time","audio_onset_time","response_time"];
-    const rows = [header.join(',')];
-    results.forEach((r) => {
-      rows.push([
-        r.trial,
-        r.session,
-        r.block,
-        r.group,
-        r.condition,
-        r.talker,
-        r.word,
-        r.wordCount,
-        `${r.word}.jpg`,
-        `T${r.talker}_${r.word}_normal.wav`,
-        r.imageOnset.toFixed(3),
-        r.audioOnset.toFixed(3),
-        r.responseTime === null ? 'NA' : r.responseTime.toFixed(3),
-      ].join(','));
-    });
-    return rows.join('\n');
-  }
-
-  async function runExperiment(participantId, schedule, assets) {
-    document.body.classList.add('running');
-    setStatus('準備ができたらスペースキーで開始してください');
-    await waitForSpace('スペースキーで開始');
-
-    setStatus('');
-    hideProgress();
-
-    const { trials } = schedule;
-    const { images, sounds } = assets;
-    const wordCounts = new Map();
+    const totalTrials = order.length;
+    let completedTrials = 0;
     const results = [];
-    const expStart = performance.now();
-    let prevBlock = null;
-    setLog('');
+    const recordings = [];
 
-    for (let i = 0; i < trials.length; i++) {
-      const trial = trials[i];
+    const recorderFactory = recordingEnabled ? () => makePcmRecorder(micStream) : null;
 
-      // Between blocks: show progress and wait for space to continue
-      if (prevBlock !== null && trial.block !== prevBlock) {
-        showProgressBar(results.length, trials.length);
-        showMessage(`ブロック ${prevBlock} が終わりました。次のブロックに進むにはスペースキーを押してください。`);
-        await waitForSpace();
-        setStatus('');
-        hideProgress();
-      }
-      prevBlock = trial.block;
+    // Initial rest
+    showFixation({ completed: completedTrials, total: totalTrials });
+    await delay(restMs);
 
-      // Present image
-      hideProgress();
+    for (let idx = 0; idx < order.length; idx++) {
+      const trial = order[idx];
+      const recording = recorderFactory ? recorderFactory() : null;
+
+      const trialStart = performance.now();
+      const trialStartEpochMs = Date.now();
+
       setStatus('');
       showImage(trial.word, images);
-      const imageOnset = (performance.now() - expStart) / 1000;
-      await delay(750);
+      const imageOnsetMs = performance.now() - trialStart;
+      const imageOnsetEpochMs = trialStartEpochMs + imageOnsetMs;
 
-      // Play audio
-      const audio = sounds[trial.word][trial.talker];
-      audio.currentTime = 0;
-      audio.play();
-      const audioStart = performance.now();
-      const audioOnset = (audioStart - expStart) / 1000;
+      let recStartMs = performance.now() - trialStart;
+      let recStartEpochMs = trialStartEpochMs + recStartMs;
+      let recEndMs = recStartMs + recordDurationMs;
+      let recEndEpochMs = trialStartEpochMs + recEndMs;
+      let filename = recordingEnabled && recordingFileName ? recordingFileName(participantId, trial.word) : '';
 
-      // Collect response (max 4.25s after audio onset)
-      const { aborted, rt } = await waitForResponse(4250, audioStart);
-      if (aborted) {
-        setStatus('ESCで中断しました');
-        showMessage('中断しました');
-        document.body.classList.remove('running');
-        return { results, aborted: true };
+      if (recordingEnabled && recording) {
+        await recording.start();
+        const blobPromise = recording.stopAfter(recordDurationMs);
+        const recBlob = await blobPromise;
+        recEndMs = performance.now() - trialStart;
+        recEndEpochMs = trialStartEpochMs + recEndMs;
+        recordings.push({ filename, blob: recBlob });
+      } else {
+        // No recording: keep the same pacing by waiting the recording window.
+        await delay(recordDurationMs);
       }
 
-      // Log trial
-      const count = (wordCounts.get(trial.word) || 0) + 1;
-      wordCounts.set(trial.word, count);
       results.push({
-        trial: i + 1,
-        session: trial.session,
-        block: trial.block,
-        group: trial.group,
-        condition: trial.condition,
-        talker: trial.talker,
+        trial: idx + 1,
         word: trial.word,
-        wordCount: count,
-        imageOnset,
-        audioOnset,
-        responseTime: rt,
+        word_id: trial.word_id,
+        list: trial.list,
+        image_file: trial.image_file,
+        trial_start_epoch_ms: trialStartEpochMs,
+        image_onset_ms: imageOnsetMs,
+        image_onset_epoch_ms: imageOnsetEpochMs,
+        recording_start_ms: recStartMs,
+        recording_end_ms: recEndMs,
+        recording_start_epoch_ms: recStartEpochMs,
+        recording_end_epoch_ms: recEndEpochMs,
+        iti_ms: itiMs,
+        participant_id: participantId,
+        recording_file: filename,
       });
 
-      // ITI: only within block; 1s fixed
-      const nextTrial = trials[i + 1];
-      if (nextTrial && nextTrial.block === trial.block) {
-        showProgressBar(results.length, trials.length);
-        showFixation();
-        setStatus('');
-        await delay(1000);
-      }
+      completedTrials = idx + 1;
+      showFixation({ completed: completedTrials, total: totalTrials });
+      await delay(itiMs);
     }
 
-    setStatus('セッション完了。結果をダウンロードできます。');
+    // Final rest
+    showFixation({ completed: totalTrials, total: totalTrials });
+    await delay(restMs);
+
     showMessage('終了しました。お疲れさまでした。');
     document.body.classList.remove('running');
-    return { results, aborted: false };
+    setStatus('結果を準備しています...');
+    return { results, recordings };
   }
 
-  // ---------- Main flow ----------
+  async function createZip(sessionConfig, participantId, results, recordings) {
+    const zip = new JSZip();
+    const csv = buildCsv(results);
+    zip.file(sessionConfig.csvFileName(participantId), csv);
+    if (sessionConfig.recordingEnabled) {
+      recordings.forEach(({ filename, blob }) => {
+        zip.file(filename, blob);
+      });
+    }
+    const content = await zip.generateAsync({ type: 'blob' });
+    return content;
+  }
+
   preloadBtn.addEventListener('click', async () => {
     const participantId = participantInput.value.trim();
     if (!participantId) {
@@ -421,71 +459,58 @@
 
     preloadBtn.disabled = true;
     startBtn.classList.add('hidden');
-    startBtn.disabled = true;
     downloadBtn.classList.add('hidden');
-    preparedSession = null;
-    setStatus('スケジュールを作成しています...');
     setLog('');
+
     try {
-      const schedule = buildSchedule(participantId);
-      const assets = await preloadAssets(schedule.talkersByWord);
-      preparedSession = { participantId, schedule, assets };
-      setStatus('プリロード完了。準備ができたらスペースキーで開始してください。');
-      setLog(`条件リスト: ${schedule.conditionList} / Exposure: ${schedule.exposureOrder} / Single talker: T${schedule.nvTalker}`);
-      showMessage('スペースキーで開始');
+      const practiceOrder = buildPracticeOrder(participantId);
+      const productionOrder = buildProductionOrder(participantId);
+      const practiceImages = await preloadImages(practiceOrder, SESSION_CONFIGS.practice.imageBaseUrl);
+      const productionImages = await preloadImages(productionOrder, SESSION_CONFIGS.production.imageBaseUrl);
+
+      setStatus('プリロード完了。スペースキーで練習を開始できます。');
       startBtn.classList.remove('hidden');
-      startBtn.disabled = false;
-    } catch (err) {
-      console.error(err);
-      setStatus(`エラー: ${err.message}`);
-      preloadBtn.disabled = false;
-    }
-  });
+      showMessage('スペースキーで練習開始');
+      setLog('');
 
-  startBtn.addEventListener('click', async () => {
-    if (!preparedSession) {
-      setStatus('先にプリロードを実行してください。');
-      return;
-    }
+      startBtn.onclick = async () => {
+        enterExperimentScreen();
+        startBtn.classList.add('hidden');
+        try {
+          // 練習（録音なし）
+          await runTask(participantId, practiceOrder, practiceImages, null, SESSION_CONFIGS.practice);
+          setStatus('練習を完了しました。本番のためマイク許可を確認します...');
+          showMessage('練習終了');
 
-    const { participantId, schedule, assets } = preparedSession;
-    startBtn.disabled = true;
-    enterExperimentScreen();
+          // マイク許可
+          let micStream = null;
+          micStream = await getMicStream();
 
-    try {
-      const { results, aborted } = await runExperiment(participantId, schedule, assets);
-      exitExperimentScreen();
-      startBtn.classList.add('hidden');
-      preparedSession = null;
-
-      if (aborted) {
-        setStatus('中断しました。必要なら再度プリロードしてください。');
-        preloadBtn.disabled = false;
-        return;
-      }
-
-      const csv = buildCsv(results, participantId);
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      downloadBtn.classList.remove('hidden');
-      downloadBtn.onclick = () => {
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `learning_phase_${participantId}_all_sessions.csv`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+          // 本番
+          const { results, recordings } = await runTask(participantId, productionOrder, productionImages, micStream, SESSION_CONFIGS.production);
+          const zipBlob = await createZip(SESSION_CONFIGS.production, participantId, results, recordings);
+          const url = URL.createObjectURL(zipBlob);
+          // 自動ダウンロード
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = SESSION_CONFIGS.production.zipFileName(participantId);
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setStatus('本番の結果をダウンロードしました。');
+        } catch (err) {
+          console.error(err);
+          setStatus(`エラー: ${err.message}`);
+          configEl.classList.remove('hidden');
+          startBtn.classList.remove('hidden');
+          document.body.classList.remove('running');
+          preloadBtn.disabled = false;
+        }
       };
-      setStatus('結果をダウンロードしてください');
-      setLog(`トライアル数: ${results.length}`);
-      preloadBtn.disabled = false;
     } catch (err) {
       console.error(err);
       setStatus(`エラー: ${err.message}`);
-      exitExperimentScreen();
-      startBtn.disabled = false;
       preloadBtn.disabled = false;
-      preparedSession = null;
     }
   });
 })();
