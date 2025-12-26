@@ -10,7 +10,7 @@ Summary of the browser-based learning phase and logging. Open `index.html` in a 
 ## Presentation sequence
 - 24 blocks: 12 encounters of the Single (no variability) list followed by 12 encounters of the Multi (high variability) list, or the reverse for counterbalancing (see below). Each block has 12 trials containing only one condition.
 - Session 1 = blocks 1–12 (first-presented condition), Session 2 = blocks 13–24 (second condition).
-- 12 s rest between blocks. ITI inside blocks is 1 s; only the fixation and the top progress bar are shown.
+- Between blocks, a message prompts the participant to press the space bar to continue (self-paced rest; no fixed duration). ITI inside blocks is 1 s; only the fixation and the top progress bar are shown.
 - Within-trial timing (fixed):  
   1) Show image.  
   2) Play audio after 750 ms.  

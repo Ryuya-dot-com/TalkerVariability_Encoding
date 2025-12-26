@@ -2,61 +2,157 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>Production Task (Browser)</title>
+  <title>Learning Task (Browser)</title>
   <style>
-    body { margin:0; padding:0; background:#000; color:#fff; font-family:"Noto Sans","Helvetica Neue",Arial,sans-serif; display:flex; justify-content:center; align-items:center; min-height:100vh; }
-    body.running { cursor:none; }
-    #app { width:100%; max-width:960px; padding:24px; box-sizing:border-box; text-align:center; }
-    #config { margin-bottom:16px; background:#111; border:1px solid #333; border-radius:8px; padding:16px; }
-    label { display:block; margin:8px 0; }
-    input { padding:6px 10px; font-size:16px; border-radius:4px; border:1px solid #444; background:#222; color:#fff; }
-    button { padding:10px 18px; font-size:16px; border:none; border-radius:6px; background:#2f80ed; color:#fff; cursor:pointer; }
-    button:disabled { opacity:0.5; cursor:not-allowed; }
-    #status { margin:12px 0; font-size:15px; color:#ccc; min-height:22px; }
-    #stimulus-area { position:relative; width:100%; height:60vh; border:1px solid #333; border-radius:8px; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
-    #stimulus-img { max-width:90%; max-height:90%; display:none; }
-    #fixation, #message { position:absolute; font-size:48px; font-weight:600; display:none; }
-    #progress-container { position:absolute; bottom:24px; left:50%; transform:translateX(-50%); width:70%; height:10px; background:#111; border:1px solid #333; border-radius:999px; overflow:hidden; display:none; }
-    #progress-bar { height:100%; width:0%; background:#2f80ed; transition:width 0.3s ease; }
-    #log { margin-top:12px; font-size:14px; color:#aaa; min-height:20px; }
-    #download-btn { margin-top:16px; background:#27ae60; }
-    .hidden { display:none !important; }
-    body.running #status,
-    body.running #log { display:none; }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #000;
+      color: #fff;
+      font-family: "Noto Sans", "Helvetica Neue", Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    body.running {
+      cursor: none;
+    }
+    #app {
+      width: 100%;
+      max-width: 960px;
+      padding: 24px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    .hidden { display: none; }
+    #config {
+      margin-bottom: 16px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 16px;
+    }
+    label { display: block; margin: 8px 0; }
+    input, select {
+      padding: 6px 10px;
+      font-size: 16px;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: #222;
+      color: #fff;
+    }
+    button {
+      padding: 10px 18px;
+      font-size: 16px;
+      border: none;
+      border-radius: 6px;
+      background: #2f80ed;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #status { margin: 12px 0; font-size: 15px; color: #ccc; min-height: 22px; }
+    .presenting #status,
+    .presenting #log { display: none; }
+    #stimulus-area {
+      position: relative;
+      width: 100%;
+      height: 70vh;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #progress {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 80%;
+      max-width: 720px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+      z-index: 2;
+    }
+    #progress-track {
+      width: 100%;
+      height: 10px;
+      background: #111;
+      border: 1px solid #333;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    #progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #2f80ed;
+      transition: width 0.2s ease;
+    }
+    #progress-label {
+      font-size: 13px;
+      color: #ccc;
+    }
+    #stimulus-img {
+      max-width: 90%;
+      max-height: 90%;
+      display: none;
+    }
+    #fixation, #message {
+      position: absolute;
+      font-size: 48px;
+      font-weight: 600;
+      display: none;
+    }
+    #log {
+      margin-top: 12px;
+      font-size: 14px;
+      color: #aaa;
+      min-height: 20px;
+    }
+    #download-btn {
+      margin-top: 16px;
+      background: #27ae60;
+    }
   </style>
 </head>
 <body>
   <div id="app">
-    <h1>Production Task</h1>
     <div id="config">
       <label>参加者ID (例: 001)
         <input id="participant-id" type="text" placeholder="001" />
       </label>
-      <div style="color:#ccc; font-size:14px; line-height:1.7; text-align:left; padding:10px; border:1px solid #222; border-radius:8px; background:#0b0b0b;">
-        <div style="font-weight:700; margin-bottom:6px;">参加者への指示</div>
-        <div>- これから24枚の写真が提示されます（練習は動物5枚）。</div>
-        <div>- 写真が出たら、できるだけ早くスペイン語の単語を声に出してください。</div>
-        <div>- 練習では英語で答えてかまいません（録音もしません）。</div>
-        <div>- 本番では録音します。マイク許可ダイアログが出たら許可してください。</div>
-        <div>- 流れ: 参加者ID入力 → 練習（録音なし） → 本番（録音あり）。スペースで練習開始後は自動進行します。</div>
-        <div style="margin-top:6px; color:#8dc1ff;">※ 画像プリロード後、スペースキーで練習を開始できます。</div>
+      <div style="color:#ccc; font-size:14px; line-height:1.6; text-align:left;">
+        <strong>実施前に確認してください：</strong>
+        <ul style="margin:8px 0 0 18px; padding:0;">
+          <li>所要時間: 約30分（12ブロック、各ブロック間でスペースキーで進行）</li>
+          <li>覚える語数: 24語</li>
+          <li>提示回数: 各語12回</li>
+          <li>音声が流れます。開始前にちょうどいい音量へ調整してください</li>
+          <li>準備ができたらスペースキーで開始できます</li>
+        </ul>
       </div>
-      <button id="preload-btn">プリロード開始</button>
+      <button id="preload-btn">プリロードして準備</button>
     </div>
     <div id="status"></div>
     <div id="stimulus-area">
+      <div id="progress">
+        <div id="progress-track"><div id="progress-fill"></div></div>
+        <div id="progress-label"></div>
+      </div>
       <img id="stimulus-img" alt="stimulus" />
       <div id="fixation">+</div>
       <div id="message"></div>
-      <div id="progress-container">
-        <div id="progress-bar"></div>
-      </div>
     </div>
     <div id="log"></div>
     <button id="start-btn" class="hidden">スペースキーで開始</button>
-    <button id="download-btn" class="hidden">結果(zip)をダウンロード</button>
+    <button id="download-btn" class="hidden">結果CSVをダウンロード</button>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
