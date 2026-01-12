@@ -114,10 +114,10 @@
   function buildSchedule(participantId) {
     const numericId = parseNumericId(participantId);
     const baseId = Number.isFinite(numericId) && numericId > 0 ? numericId : 1;
-    const patternIndex = (baseId - 1) % 24;
-    const rotationIndex = patternIndex % 6;
-    const orderIndex = Math.floor(patternIndex / 6) % 2;
-    const listIndex = Math.floor(patternIndex / 12) % 2;
+    const pairIndex = Math.floor((baseId - 1) / 2);
+    const rotationIndex = pairIndex % 6;
+    const listIndex = Math.floor(pairIndex / 6) % 2;
+    const orderIndex = baseId % 2 === 0 ? 1 : 0;
 
     const nvTalker = TALKERS[rotationIndex];
 
