@@ -8,20 +8,63 @@ Summary of the browser-based learning phase and logging. Open `index.html` in a 
 - Reload/back actions raise warnings. Do not refresh or use the back button during the task.
 
 ## Presentation sequence
-- 24 blocks: 12 encounters of the Single (no variability) list followed by 12 encounters of the Multi (high variability) list, or the reverse for counterbalancing (see below). Each block has 12 trials containing only one condition.
-- Session 1 = blocks 1–12 (first-presented condition), Session 2 = blocks 13–24 (second condition).
-- Between blocks, a message prompts the participant to press the space bar to continue (self-paced rest; no fixed duration). ITI inside blocks is 1 s; only the fixation and the top progress bar are shown.
+- 24 blocks total. Each block has 12 trials with only one condition.
+- Order per round: 6 blocks of the first condition, then 6 blocks of the second condition. Round 2 repeats the same order (total: 6 + 6 + 6 + 6 blocks).
+- Session 1 = blocks 1-12 (both conditions once). Session 2 = blocks 13-24 (repeat).
+- A single instruction screen appears before the first block only (matching the first condition).
+- Between blocks, a message prompts the participant to press the space bar to continue (self-paced rest; no fixed duration). A halfway message appears after block 12. ITI inside blocks is 1 s; only the fixation and the top progress bar are shown.
 - Within-trial timing (fixed):  
   1) Show image.  
   2) Play audio after 750 ms.  
   3) Wait up to 4.25 s from audio onset for any key. Esc aborts; other keys only log RT and do not alter timing.
 
 ## Condition assignment (participant ID)
-- Even numeric ID → Condition A (LIST1 = Single, LIST2 = Multi). Odd → Condition B (LIST1 = Multi, LIST2 = Single).
-- Exposure order: Single-first if `ID % 4` is 0 or 1; otherwise Multi-first. This counterbalances whether words 1–12 (Single) or 13–24 (Multi) are learned first.
-- Single talker `nvTalker` = (ID % 6), with 0 replaced by 6.
-- Multi talkers: shuffle 1–6 twice with the seeded RNG; assign one talker per Multi block (each talker appears twice across 12 Multi blocks).
+- 24 counterbalance patterns: list (2) x order (2) x rotation (6).
+- Pattern index: `patternIndex = (ID - 1) % 24`
+- Rotation: `rotationIndex = patternIndex % 6` -> start talker `T[rotationIndex]` (T1..T6). Single and Multi use the same rotation start.
+- Order: `orderIndex = floor(patternIndex / 6) % 2` -> Single-first if 0, else Multi-first.
+- List assignment: `listIndex = floor(patternIndex / 12) % 2` -> Condition A if 0 (LIST1 = Single, LIST2 = Multi), Condition B if 1 (LIST1 = Multi, LIST2 = Single).
+- Multi talkers: rotate [1..6] so it starts at the same talker as Single, then repeat twice (12 Multi blocks).
 - Item order: seed-shuffle words within each condition once per participant and repeat that order across all 12 encounters of that condition.
+
+## Check block order for a specific ID
+Use the formulas above, or run this snippet in the browser console (open `index.html`, press F12):
+
+```js
+const id = 1; // participant ID
+const TALKERS = [1, 2, 3, 4, 5, 6];
+const patternIndex = (id - 1) % 24;
+const rotationIndex = patternIndex % 6;
+const orderIndex = Math.floor(patternIndex / 6) % 2;
+const listIndex = Math.floor(patternIndex / 12) % 2;
+
+const order = orderIndex === 0 ? ['Single', 'Multi'] : ['Multi', 'Single'];
+const startTalker = TALKERS[rotationIndex];
+const cycle = TALKERS.slice(rotationIndex).concat(TALKERS.slice(0, rotationIndex));
+const multiTalkers = cycle.concat(cycle);
+
+const blocks = [];
+let multiIndex = 0;
+for (let round = 1; round <= 2; round += 1) {
+  for (const condition of order) {
+    for (let i = 1; i <= 6; i += 1) {
+      blocks.push({
+        block: blocks.length + 1,
+        round,
+        condition,
+        talker: condition === 'Single' ? startTalker : multiTalkers[multiIndex++],
+      });
+    }
+  }
+}
+
+console.log({
+  list: listIndex === 0 ? 'A' : 'B',
+  order: orderIndex === 0 ? 'Single-first' : 'Multi-first',
+  startTalker,
+});
+console.table(blocks);
+```
 
 ## Logging and CSV
 - At the end, download `learning_phase_{participantId}_all_sessions.csv`.  

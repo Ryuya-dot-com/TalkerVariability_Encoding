@@ -11,6 +11,9 @@
   ];
   const WORDS = [...LIST1, ...LIST2];
   const TALKERS = [1, 2, 3, 4, 5, 6];
+  const INSTRUCTION_SINGLE = 'これから１２個のスペイン語の単語を６回聞いてもらいます。頑張って覚えてください！';
+  const INSTRUCTION_MULTI = 'これから１２個のスペイン語の単語を６回聞いてもらいます。それぞれ異なる話者によって発音されます。頑張って覚えてください！';
+  const HALFWAY_MESSAGE = 'これで半分終わりました。続けるにはスペースキーを押してください。';
 
   // ---------- DOM refs ----------
   const preloadBtn = document.getElementById('preload-btn');
@@ -92,35 +95,46 @@
     return arr;
   }
 
+  function rotateTalkers(talkers, startTalker) {
+    const startIndex = talkers.indexOf(startTalker);
+    if (startIndex === -1) return talkers.slice();
+    return [...talkers.slice(startIndex), ...talkers.slice(0, startIndex)];
+  }
+
   function parseNumericId(participantId) {
     const digits = participantId.match(/\d+/g);
     if (!digits) return 0;
     return parseInt(digits.join(''), 10);
   }
 
+  function getInstructionText(condition) {
+    return condition === 'Multi' ? INSTRUCTION_MULTI : INSTRUCTION_SINGLE;
+  }
+
   function buildSchedule(participantId) {
     const numericId = parseNumericId(participantId);
-    const singleRemainder = numericId % 6;
-    const nvTalker = singleRemainder === 0 ? 6 : singleRemainder;
+    const baseId = Number.isFinite(numericId) && numericId > 0 ? numericId : 1;
+    const patternIndex = (baseId - 1) % 24;
+    const rotationIndex = patternIndex % 6;
+    const orderIndex = Math.floor(patternIndex / 6) % 2;
+    const listIndex = Math.floor(patternIndex / 12) % 2;
 
-    const conditionList = numericId % 2 === 0 ? 'A' : 'B';
+    const nvTalker = TALKERS[rotationIndex];
+
+    const conditionList = listIndex === 0 ? 'A' : 'B';
     const singleWords = conditionList === 'A' ? LIST1 : LIST2;
     const multiWords = conditionList === 'A' ? LIST2 : LIST1;
 
-    const exposureOrder = (numericId % 4 === 0 || numericId % 4 === 1)
-      ? 'Single-first'
-      : 'Multi-first';
+    const exposureOrder = orderIndex === 0 ? 'Single-first' : 'Multi-first';
 
     // Item order per participant
-    const orderRng = mulberry32(numericId * 1000 + 7);
+    const orderRng = mulberry32(baseId * 1000 + 7);
     const singleOrder = seededShuffle(singleWords, orderRng);
     const multiOrder = seededShuffle(multiWords, orderRng);
 
-    // Talker rotation for Multi
-    const talkerRng = mulberry32(numericId * 1000 + 99);
-    const cycleOne = seededShuffle(TALKERS, talkerRng);
-    const cycleTwo = seededShuffle(TALKERS, talkerRng);
-    const multiTalkerSequence = [...cycleOne, ...cycleTwo]; // length 12
+    // Talker rotation for Multi: random start across participants, fixed within participant
+    const multiCycle = rotateTalkers(TALKERS, nvTalker);
+    const multiTalkerSequence = [...multiCycle, ...multiCycle]; // length 12
 
     const trials = [];
     const talkersByWord = new Map();
@@ -135,32 +149,38 @@
 
     let block = 0;
     let multiBlockIndex = 0;
-    const encountersPerCondition = 12;
+    const encountersPerRound = 6;
+    const rounds = 2;
 
-    conditionSequence.forEach((condition) => {
-      const words = condition === 'Single' ? singleOrder : multiOrder;
-      for (let encounter = 1; encounter <= encountersPerCondition; encounter++) {
-        block += 1;
-        const talker = condition === 'Single'
-          ? nvTalker
-          : multiTalkerSequence[multiBlockIndex];
-        if (condition === 'Multi') multiBlockIndex += 1;
-        const session = block <= encountersPerCondition ? 1 : 2;
+    for (let round = 0; round < rounds; round++) {
+      conditionSequence.forEach((condition) => {
+        const words = condition === 'Single' ? singleOrder : multiOrder;
+        for (let encounter = 1; encounter <= encountersPerRound; encounter++) {
+          block += 1;
+          const talker = condition === 'Single'
+            ? nvTalker
+            : multiTalkerSequence[multiBlockIndex];
+          if (condition === 'Multi') multiBlockIndex += 1;
+          const session = round + 1;
 
-        words.forEach((word) => {
-          const groupNum = Math.floor(WORDS.indexOf(word) / 6) + 1;
-          trials.push({
-            block,
-            group: groupNum,
-            condition,
-            word,
-            talker,
-            session,
+          words.forEach((word) => {
+            const groupNum = Math.floor(WORDS.indexOf(word) / 6) + 1;
+            trials.push({
+              block,
+              group: groupNum,
+              condition,
+              word,
+              talker,
+              session,
+            });
+            addTalker(word, talker);
           });
-          addTalker(word, talker);
-        });
-      }
-    });
+        }
+      });
+    }
+
+    const totalBlocks = block;
+    const halfwayBlock = totalBlocks / 2;
 
     return {
       numericId,
@@ -168,6 +188,8 @@
       conditionList,
       exposureOrder,
       multiTalkerSequence,
+      multiStartTalker: multiCycle[0],
+      halfwayBlock,
       trials,
       talkersByWord,
     };
@@ -338,13 +360,13 @@
 
   async function runExperiment(participantId, schedule, assets) {
     document.body.classList.add('running');
+    const { trials } = schedule;
     setStatus('準備ができたらスペースキーで開始してください');
-    await waitForSpace('スペースキーで開始');
+    const firstCondition = trials.length ? trials[0].condition : 'Single';
+    await waitForSpace(getInstructionText(firstCondition));
 
     setStatus('');
     hideProgress();
-
-    const { trials } = schedule;
     const { images, sounds } = assets;
     const wordCounts = new Map();
     const results = [];
@@ -358,8 +380,11 @@
       // Between blocks: show progress and wait for space to continue
       if (prevBlock !== null && trial.block !== prevBlock) {
         showProgressBar(results.length, trials.length);
-        showMessage(`ブロック ${prevBlock} が終わりました。次のブロックに進むにはスペースキーを押してください。`);
-        await waitForSpace();
+        const isHalfway = prevBlock === schedule.halfwayBlock;
+        const promptText = isHalfway
+          ? HALFWAY_MESSAGE
+          : `ブロック ${prevBlock} が終わりました。次のブロックに進むにはスペースキーを押してください。`;
+        await waitForSpace(promptText);
         setStatus('');
         hideProgress();
       }
@@ -441,7 +466,7 @@
       const assets = await preloadAssets(schedule.talkersByWord);
       preparedSession = { participantId, schedule, assets };
       setStatus('プリロード完了。準備ができたらスペースキーで開始してください。');
-      setLog(`条件リスト: ${schedule.conditionList} / Exposure: ${schedule.exposureOrder} / Single talker: T${schedule.nvTalker}`);
+      setLog(`条件リスト: ${schedule.conditionList} / 順序: ${schedule.exposureOrder} / Single talker: T${schedule.nvTalker} / Multi開始: T${schedule.multiStartTalker}`);
       showMessage('スペースキーで開始');
       startBtn.classList.remove('hidden');
       startBtn.disabled = false;
